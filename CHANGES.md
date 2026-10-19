@@ -379,3 +379,496 @@ plt.show()
 -	All 20 week 
 -	CG
 -	NR
+
+ # before
+ad_keep_dict = {}
+
+
+for ad_i in adata_list:
+    ad_full_name = ad_i.obs['section_fname'].iloc[0]
+    ad_name_parts = ad_full_name.split("_")
+    ad_name = '_'.join(ad_name_parts[:3])
+    
+    (ad_keep_value, _) = ad_keep_dict.get(ad_name, (0, ''))
+    if ad_i.n_obs > ad_keep_value:
+        ad_keep_dict[ad_name] = (ad_i.n_obs, ad_i.obs['section_fname'].iloc[0])
+        
+ad_keep_dict
+
+
+print(f'Number of images after: {len(adata_list)}')
+print(f'Number of images after: {len(ad_keep_dict)}')
+
+
+# after - yellow = changed, before didn’t account for condition now output = all
+# 65 rather than 37 before
+
+
+# Keep one section per animal per condition (the one with the most fibers).
+# Key = animal (3rd part of the name) + ctrl/expt (4th part), so ctrl and expt are kept separately.
+ad_keep_dict = {}
+
+
+for ad_i in adata_list:
+    ad_full_name = ad_i.obs['section_fname'].iloc[0]
+    ad_name_parts = ad_full_name.split("_")
+    condition = 'ctrl' if 'ctrl' in ad_name_parts[3].lower() else 'expt'
+    ad_name = ad_name_parts[2] + '_' + condition
+
+
+    (ad_keep_value, _) = ad_keep_dict.get(ad_name, (0, ''))
+    if ad_i.n_obs > ad_keep_value:
+        ad_keep_dict[ad_name] = (ad_i.n_obs, ad_full_name) # keeps image with more fibers if there are two of the same
+
+
+print(f'Number of images before: {len(adata_list)}')
+print(f'Number of images after: {len(ad_keep_dict)}')
+
+
+
+
+# next cell 
+
+
+# before - wrong directory path and directory didn’t exist 
+
+
+import pickle
+
+
+# Save list to pickle 
+list_pkl_file = '/scratch/hyt6ex/AIM1C_laminin_all/ad_shortlist.pkl'
+with open(list_pkl_file, 'wb') as f:
+    pickle.dump(adata_short_list, f)
+
+
+
+
+
+
+# after - 
+​​import pickle
+
+
+ANALYSIS_DIR = Path("/scratch/hyt6ex/RBT/analysis/")
+ANALYSIS_DIR.mkdir(exist_ok=True)
+
+
+# Save list to pickle
+list_pkl_file = ANALYSIS_DIR / 'ad_shortlist.pkl'
+with open(list_pkl_file, 'wb') as f:
+    pickle.dump(adata_short_list, f) # Serializes an object and writes it directly to an open binary file
+
+
+
+
+# SORTING CATEGORIES: 
+# sorting groups 
+# 1: ctrl (all ctrl groups)
+# 2: BP (all BP, all 12 wks)
+# 3: CG 12wk (2, 13-17, 20-21)
+# 4: NR 12 wk (1-7)
+# 5: CG 20 wk (5-12)
+# 6: NR 20 wk (9-16)
+
+
+import re 
+
+
+cg_12wk = [2,13,14,15,16,17,20,21]
+nr_12wk = list(range(1,8))
+cg_20wk = list(range(5,13))
+nr_20wk = list(range(9,17))
+
+
+group_order = ['Control', 'BP', 'CG 12wk', 'NR 12wk', 'CG 20wk', 'NR 20wk']
+
+
+def get_animal(section_fname):
+    # Aim1c_LG_BP01_ctrl_s1c1-3 -> BP01
+    return section_fname.split('_')[2]
+
+
+def get_group(animal_name):
+    # BP01 -> BP -> group_names['BP']
+    prefix = re.match(r'[A-Za-z]+', animal_name).group()
+    num = int(re.search(r'\d+', animal_name).group())
+    if prefix == 'BP': 
+        return 'BP'
+    if prefix == 'CG' and num in cg_12wk: 
+        return 'CG 12wk'
+    if prefix == 'NR' and num in nr_12wk: 
+        return 'NR 12wk'
+    if prefix == 'CG' and num in cg_20wk: 
+        return 'CG 20wk'
+    if prefix == 'NR' and num in nr_20wk: 
+        return 'NR 20wk'
+    if prefix == 'BP': 
+        return 'BP'
+    return 'NO GROUP'
+
+
+ def sort_condition(section_fname):
+    if 'ctrl' in section_fname.lower():
+        return 'CTRL'
+    if 'exp' in section_fname.lower():
+        return 'EXP'
+
+
+def section_group(section_fname):
+    if sort_condition(section_fname) == 'CTRL':
+        return 'Control'
+    return get_group(get_animal(section_fname))
+
+
+
+
+# Before: (added cell above to sort ^)
+adatas = ad.concat(adata_short_list, merge='same', uns_merge='first')
+adatas.obs['section_fname'] = adatas.obs['section_fname'].astype('category')
+adatas.obs_names_make_unique()
+
+
+# def sort_condition(section_fname):
+#     if 'ctrl' in section_fname.lower():
+#         return 'CTRL'
+#     if '_l_' in section_fname.lower():
+#         return 'CTRL'
+#     if 'expt' in section_fname.lower():
+#         return 'EXP'
+#     if '_t_' in section_fname.lower():
+#         return 'EXP'
+
+
+def get_animal(section_fname):
+    # Aim1c_LG_BP01_ctrl_s1c1-3 -> BP01
+    return section_fname.split('_')[2]
+
+
+def get_group(animal_name):
+    # BP01 -> BP -> group_names['BP']
+    prefix = re.match(r'[A-Za-z]+', animal_name).group()
+    return group_names.get(prefix, prefix)
+
+
+def sort_condition(section_fname):
+    if 'ctrl' in section_fname.lower():
+        return 'CTRL'
+    if 'exp' in section_fname.lower():
+        return 'EXP'
+    
+adatas_df = adatas.to_df()
+adatas_df['section_fname'] = adatas.obs['section_fname']
+adatas_df['condition'] = adatas_df['section_fname'].map(lambda x: sort_condition(x))
+adatas_df['muscle'] = adatas_df['section_fname'].map(lambda x: 'TA' if 'ta' in x.lower() else 'LGN')
+adatas_df['animal_name'] = adatas_df['section_fname'].map(lambda x: x.split('_')[0])
+adatas_df['group'] = adatas_df['animal_name'].map(baa_categories)
+adatas_df['LISA-minFD'] = adatas.obs['LISA-minFD']
+adatas_df.head()
+
+
+adatas.write_h5ad('/scratch/hyt6ex/AIM1C_laminin_all/all_sections_adata.h5ad')
+
+
+# changes to above cell: 
+
+
+# adatas = ad.concat(adata_short_list, merge='same', uns_merge='first')
+# adatas.obs['section_fname'] = adatas.obs['section_fname'].astype('category')
+# adatas.obs_names_make_unique() 
+# ^ was getting error 
+adatas = ad.concat(adata_short_list, merge='same', uns_merge='first', index_unique='-')
+adatas.obs['section_fname'] = adatas.obs['section_fname'].astype('category')
+    
+adatas_df = adatas.to_df()
+adatas_df['section_fname'] = adatas.obs['section_fname']
+adatas_df['condition'] = adatas_df['section_fname'].map(lambda x: sort_condition(x))
+adatas_df['muscle'] = adatas_df['section_fname'].map(lambda x: 'TA' if 'ta' in x.lower() else 'LGN')
+adatas_df['animal_name'] = adatas_df['section_fname'].map(lambda x: get_animal(x))
+adatas_df['group'] = adatas_df['section_fname'].map(section_group)
+adatas_df['LISA-minFD'] = adatas.obs['LISA-minFD']
+
+
+adatas.write_h5ad(ANALYSIS_DIR / 'all_sections_adata.h5ad')
+adatas_df.head()
+adatas_df.groupby('group')['animal_name'].count()
+
+
+print(adatas_df.groupby('group')['animal_name'].unique())
+
+
+
+
+
+
+
+
+ 
+
+START HERE FOR LOADING DATA FROM FILE: 
+
+
+
+# rerun setup cell, deleted Michael’s baa_categories (our groups defined above and # again below)
+import re
+from pathlib import Path
+import pickle
+
+
+import anndata as ad
+import numpy as np
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+import squidpy as sq
+import pingouin as pg
+from scipy import stats
+from tqdm import tqdm
+from statannotations.Annotator import Annotator
+
+
+ANALYSIS_DIR = Path("/scratch/hyt6ex/RBT/analysis/")
+
+
+#before 
+section_data_dicts = []
+for adata_i in tqdm(adata_list):
+    slide_name = adata_i.obs['section_fname'].iloc[0]
+    is_control = "ctrl" in slide_name.lower()
+    
+    lisa_counts = adata_i.obs['LISA-minFD'].value_counts()
+    
+    this_section_data_dict = {
+        'condition' : 'CTRL' if is_control else 'EXP',
+        'slide_name': slide_name,
+        'ns_count' : lisa_counts['ns'],
+        'HH_count' : lisa_counts['HH'],
+        'LL_count' : lisa_counts['LL'],
+        'LH_count' : lisa_counts['LH'],
+        'HL_count' : lisa_counts['HL'],
+        'animal_name' : get_animal(slide_name),
+    }
+    section_data_dicts.append(this_section_data_dict)
+    
+counts_df = pd.DataFrame(section_data_dicts)
+counts_df['Total Count'] = counts_df['ns_count'] + counts_df['HH_count'] + counts_df['LL_count'] + counts_df['LH_count'] + counts_df['HL_count']
+counts_df['ns_fraction'] = counts_df['ns_count'] / counts_df['Total Count']
+counts_df['HH_fraction'] = counts_df['HH_count'] / counts_df['Total Count']
+counts_df['LL_fraction'] = counts_df['LL_count'] / counts_df['Total Count']
+counts_df['LH_fraction'] = counts_df['LH_count'] / counts_df['Total Count']
+counts_df['HL_fraction'] = counts_df['HL_count'] / counts_df['Total Count']
+
+
+counts_df['group'] = counts_df['animal_name'].map(baa_categories)
+counts_df['muscle'] = counts_df['group'].map(lambda x: 'TA' if 'ta' in x.lower() else 'LGN')
+
+
+counts_df.sort_values(['animal_name', 'group', 'condition'])
+
+
+counts_df['group'] = counts_df.apply(lambda x: 'Control' if x['condition']=='CTRL' else x['group'], axis=1)
+
+
+
+
+counts_df.head()
+
+
+#after 
+
+
+section_data_dicts = []
+for adata_i in tqdm(adata_list):
+    slide_name = adata_i.obs['section_fname'].iloc[0]
+    lisa_counts = adata_i.obs['LISA-minFD'].value_counts()
+
+
+    this_section_data_dict = {
+        'condition'   : sort_condition(slide_name),
+        'slide_name'  : slide_name,
+        'ns_count'    : lisa_counts.get('ns', 0),
+        'HH_count'    : lisa_counts.get('HH', 0),
+        'LL_count'    : lisa_counts.get('LL', 0),
+        'LH_count'    : lisa_counts.get('LH', 0),
+        'HL_count'    : lisa_counts.get('HL', 0),
+        'animal_name' : get_animal(slide_name),
+        'group'       : section_group(slide_name),
+    }
+    section_data_dicts.append(this_section_data_dict)
+
+
+counts_df = pd.DataFrame(section_data_dicts)
+counts_df['Total Count'] = counts_df['ns_count'] + counts_df['HH_count'] + counts_df['LL_count'] + counts_df['LH_count'] + counts_df['HL_count']
+counts_df['ns_fraction'] = counts_df['ns_count'] / counts_df['Total Count']
+counts_df['HH_fraction'] = counts_df['HH_count'] / counts_df['Total Count']
+counts_df['LL_fraction'] = counts_df['LL_count'] / counts_df['Total Count']
+counts_df['LH_fraction'] = counts_df['LH_count'] / counts_df['Total Count']
+counts_df['HL_fraction'] = counts_df['HL_count'] / counts_df['Total Count']
+counts_df['muscle'] = 'LGN'
+
+
+counts_df.head()
+
+
+# changes made 
+from tqdm import tqdm 
+
+
+section_data_dicts = []
+for adata_i in tqdm(adata_list):
+    slide_name = adata_i.obs['section_fname'].iloc[0]
+    is_control = "ctrl" in slide_name.lower()
+    
+    lisa_counts = adata_i.obs['LISA-minFD'].value_counts()
+    
+    this_section_data_dict = {
+        'condition' : sort_condition(slide_name), # changed variable 
+        'slide_name': slide_name,
+        'ns_count' : lisa_counts['ns'],
+        'HH_count' : lisa_counts['HH'],
+        'LL_count' : lisa_counts['LL'],
+        'LH_count' : lisa_counts['LH'],
+        'HL_count' : lisa_counts['HL'],
+        'animal_name' : get_animal(slide_name),
+        'group' : section_group(slide_name)
+    }
+    section_data_dicts.append(this_section_data_dict)
+    
+counts_df = pd.DataFrame(section_data_dicts)
+counts_df['Total Count'] = counts_df['ns_count'] + counts_df['HH_count'] + counts_df['LL_count'] + counts_df['LH_count'] + counts_df['HL_count']
+counts_df['ns_fraction'] = counts_df['ns_count'] / counts_df['Total Count']
+counts_df['HH_fraction'] = counts_df['HH_count'] / counts_df['Total Count']
+counts_df['LL_fraction'] = counts_df['LL_count'] / counts_df['Total Count']
+counts_df['LH_fraction'] = counts_df['LH_count'] / counts_df['Total Count']
+counts_df['HL_fraction'] = counts_df['HL_count'] / counts_df['Total Count']
+
+
+# counts_df['group'] = counts_df['animal_name'].section_group(slide_name)
+# counts_df['muscle'] = counts_df['group'].map(lambda x: 'TA' if 'ta' in x.lower() else 'LGN')
+
+
+# counts_df.sort_values(['animal_name', 'group', 'condition'])
+
+
+counts_df['muscle'] = 'LGN'
+counts_df.head()
+
+
+print(counts_df.head()) # holds spatial pattern data before statistics are run
+
+
+STATISTICAL ANALYSIS: old had both ta and lgn analysis, adapted/kept a couple cells (shown below) and deleted the rest of the ta cells → adjust/adapt the lgn section for new data
+
+# from ta analysis - keep and edit 
+import squidpy as sq
+from scipy import stats
+
+
+
+
+cluster_key = 'LISA-minFD'
+    
+dict_list = []
+for ad_i in tqdm(adata_list):
+    features_dict = {}
+    
+
+
+    
+    file_name = ad_i.obs['section_fname'].unique()[0]
+    animal_name = file_name.split('_')[0]
+    
+    if 'BAA13' == animal_name and 'ctrl' in file_name.lower():
+        print('Skipping BAA13 control')
+        continue
+    elif 'BAA25' == animal_name and 'exp' in file_name.lower():
+        print('Skipping BAA25 exp')
+        continue
+
+
+    sq.gr.centrality_scores(ad_i, 
+                        cluster_key=cluster_key, 
+                        connectivity_key='delaunay'
+    )
+    ad_i.uns[cluster_key + '_centrality_scores']['cluster'] = ad_i.uns[cluster_key + '_centrality_scores'].index
+
+
+    group = baa_categories[animal_name]
+    if 'ctrl' in file_name:
+        group = 'Control' 
+        
+    features_dict['animal_name'] = animal_name
+    features_dict['muscle'] = 'TA' if 'ta' in file_name.lower() else 'LGN'
+    features_dict['group'] = group
+
+
+    ad_i_df = ad_i.to_df()
+    ad_i_df[cluster_key] = ad_i.obs[cluster_key]
+
+
+    for c in ad_i_df[cluster_key].unique():
+        cluster_minfd_distrib = ad_i_df[ad_i_df[cluster_key] == c]['minFD']
+        
+        kurtosis = stats.kurtosis(cluster_minfd_distrib)
+        skew = stats.skew(cluster_minfd_distrib)
+        mean = cluster_minfd_distrib.mean()
+        median = np.median(cluster_minfd_distrib)
+        mode = stats.mode(cluster_minfd_distrib).mode
+        variance = cluster_minfd_distrib.var()
+        fraction = len(ad_i_df[ad_i_df[cluster_key] == c]) / len(ad_i_df)
+
+
+        features_dict[cluster_key + '-cluster' + str(c) + '_kurtosis'] = kurtosis
+        features_dict[cluster_key + '-cluster' + str(c) + '_skew'] = skew
+        features_dict[cluster_key + '-cluster' + str(c) + '_mean'] = mean
+        features_dict[cluster_key + '-cluster' + str(c) + '_median'] = median
+        features_dict[cluster_key + '-cluster' + str(c) + '_mode'] = mode
+        features_dict[cluster_key + '-cluster' + str(c) + '_variance'] = variance
+        features_dict[cluster_key + '-cluster' + str(c) + '_fraction'] = fraction
+        
+        features_dict[cluster_key + '-cluster' + str(c) + '_distance_median'] = np.median(ad_i.uns['lisa_distance_dict'][c])
+        features_dict[cluster_key + '-cluster' + str(c) + '_distance_variance'] = np.var(ad_i.uns['lisa_distance_dict'][c])
+        
+        centrality_scores_cluster = ad_i.uns[cluster_key + '_centrality_scores'][ad_i.uns[cluster_key + '_centrality_scores']['cluster'] == c]
+        features_dict[cluster_key + '-cluster' + str(c) + '_degree_centrality'] = centrality_scores_cluster['degree_centrality'].item()
+        features_dict[cluster_key + '-cluster' + str(c) + '_average_clustering'] = centrality_scores_cluster['average_clustering'].item()
+        features_dict[cluster_key + '-cluster' + str(c) + '_closeness_centrality'] = centrality_scores_cluster['closeness_centrality'].item()
+
+
+    features_dict['total_FCSA'] = ad_i_df['area'].sum()
+        
+    dict_list.append(features_dict)
+    
+
+
+lisa_features_df = pd.DataFrame(dict_list)
+print(lisa_features_df.columns)
+lisa_features_df.head()
+
+
+
+
+# from ta analysis - keep and edit 
+closeness_feats = [f'LISA-minFD-cluster{c}_closeness_centrality' for c in ['ns', 'LL', 'LH', 'HH', 'HL']] 
+melted_df = lisa_features_df.melt(
+    id_vars=['animal_name', 'muscle', 'group'],
+    value_vars=closeness_feats,
+    var_name='Category',
+    value_name='Closeness Centrality'
+)
+
+
+# Rename categories for better readability
+category_mapping = {
+    'LISA-minFD-clusterns_closeness_centrality': 'ns',
+    'LISA-minFD-clusterLL_closeness_centrality': 'LL',
+    'LISA-minFD-clusterLH_closeness_centrality': 'LH',
+    'LISA-minFD-clusterHH_closeness_centrality': 'HH',
+    'LISA-minFD-clusterHL_closeness_centrality': 'HL',
+}
+melted_df['Category'] = melted_df['Category'].map(category_mapping)
+
+
+melted_df_ta = melted_df[melted_df['muscle'] == 'TA']
+melted_df_gn = melted_df[melted_df['muscle'] == 'LGN']
+
